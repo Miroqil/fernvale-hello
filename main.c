@@ -20,29 +20,107 @@ static int do_init(void)
 	scriptic_run("set_plls");
 	scriptic_run("enable_psram");
 
+	scriptic_run("set_kbd");
+
 	return 0;
 }
 
-static int loop(void)
-{
-    int led = 0;
-    for (;;)
-    {
-        led = !led;
-        *((volatile uint32_t *) BIG_LED_ADDR) = led ? BIG_LED_ON : BIG_LED_OFF;
+#ifndef ARRAY_SIZE
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof(*x))
+#endif
 
-        _msleep(300);
+const uint32_t key_addr[] = {
+	KBD_MEM2,
+	KBD_MEM2,
+	KBD_MEM1,
+	KBD_MEM1,
+	KBD_MEM3,
+	KBD_MEM3,
+	KBD_MEM2,
+	KBD_MEM1,
+	KBD_MEM3,
+	KBD_MEM2,
+	KBD_MEM1,
+	KBD_MEM3,
+	KBD_MEM2,
+	KBD_MEM1,
+	KBD_MEM3,
+	KBD_MEM2,
+	KBD_MEM2,
+	KBD_MEM2,
+};
+
+const uint32_t key_mask[] = {
+	0x0000fffb,
+	0x0000fff7,
+	0x0000fdff,
+	0x0000fbff,
+	0x0000ffef,
+	0x0000ffdf,
+	0x0000ffef,
+	0x0000f7ff,
+	0x0000ffbf,
+	0x0000ffdf,
+	0x0000efff,
+	0x0000ff7f,
+	0x0000ffbf,
+	0x0000dfff,
+	0x0000feff,
+	0x0000dfff,
+	0x0000bfff,
+	0x00007fff,
+};
+
+static int read_keypad()
+{
+    int key;
+    for (key = 0; key < (ARRAY_SIZE(key_addr) - 1); key++) {
+        int v = readl(key_addr[key]);
+        int newstate = (v == key_mask[key]);
+
+        if (newstate) {
+            return key;
+        }
     }
-    
-    return 0;
+
+    return -1;
 }
 
-int main(void)
+
+void reboot()
+{
+    writel(0x1209, 0xa003001c);
+}
+
+int main()
 {
 	do_init();
 
-	while (1)
-		loop();
+        int last_key = -1;
+        int new_key = -1;
+        int led = 0;
+
+        for (;;)
+        {
+
+            new_key = read_keypad();
+            if (new_key == -1)
+                last_key = -1;
+
+            else if (new_key == ARRAY_SIZE(key_addr) - 2)
+            {
+                reboot();
+            } else {
+                if (new_key != last_key)
+                {
+                    last_key = new_key;
+
+                    led = !led;
+                    *((volatile uint32_t *) BIG_LED_ADDR) = led ? BIG_LED_ON : BIG_LED_OFF;
+                    /* _msleep(300); */
+                }
+            }
+        }
 
 	return 0;
 }
